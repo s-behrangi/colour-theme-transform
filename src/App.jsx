@@ -425,6 +425,8 @@ function TransColumn ({onChange}) {
 
         <p>The &#8635; button uses the output colours as new inputs. This overwrites the previous inputs, 
           which <em> cannot be undone.</em> It can be useful for rapidly iterating adjustments.</p>
+
+        <p>View source <a href="https://github.com/s-behrangi/colour-theme-transform">here</a>.</p>
       </fieldset>
     </div>
   );
