@@ -13,7 +13,7 @@ legend {
 
 button {
   border-radius: 5px;
-  border-color: inherit;
+  border-color: white;
   border-style: groove;
   border-width: 3px;
   background-color: inherit;
@@ -65,7 +65,7 @@ ul {
     "picker remove"
     "vals   reorder";
   border-style: groove;
-  border-color: inherit;
+  border-color: white;
   border-radius: 5px;
   border-width: 3px;
   
@@ -80,7 +80,7 @@ ul {
   flex-direction: column;
   align-items: center;
   border-style: groove;
-  border-color: inherit;
+  border-color: white;
   border-radius: 5px;
   border-width: 3px;
 }
@@ -318,6 +318,11 @@ input[type=number] {
   font-family:'Courier New', Courier, monospace;
   resize: vertical;
   box-sizing: border-box;
+}
+
+textarea:focus {
+    outline: inherit;
+    border: 1px solid #414141;
 }
 
 .input-overlay-buttons {
