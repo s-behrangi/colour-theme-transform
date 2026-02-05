@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { styled, createTheme } from '@mui/material/styles';
 import Grid from '@mui/material/Grid';
@@ -9,22 +9,19 @@ import { converter, formatHex } from 'culori';
 import { HuePicker } from 'react-color';
 import { Reorder, useDragControls } from "motion/react";
 
-
 const toHSL = converter('hsl');
-
 
 function GreyBox() {
   const [colours, setColours] = useState([]);
   const [transformParams, setParams] = useState({
     brightness: 0,
     hueShiftChecked: false,
-    hueShiftTarget: "#ffffff",
+    hueShiftTarget: 0,
     inversionChecked: false,
     inversionMidpoint: 50
   });
   const [isTextInputOpen, setTextInput] = useState(false);
   const [isColourConvertOpen, setColourConvert] = useState(false);
-  let [transformedColours, setOutput] = useState([]);
 
   const addItem = (colour = "#123456") => {
     const newId = crypto.randomUUID();
@@ -35,25 +32,23 @@ function GreyBox() {
     setColours(colours.filter(colour => colour.id != id));
   };
 
-  const updateParams = (fieldName, value) => {
-    console.log(fieldName, value);
+  const updateParams = useCallback((fieldName, value) => {
     setParams((prevParams) => ({
       ...prevParams,
       [fieldName] : value
     }))
-  };
+  }, []);
 
-  const updateItem = (id, value) => {
+  const updateItem = useCallback((id, value) => {
     setColours(prevColours => prevColours.map(colour =>
       colour.id === id ? {...colour, value: value} : colour
     ))
-  };
+  }, []);
 
   const clearColours = () => {
     setColours([]);
   }
 
-  
   const iterateColours = () => {
     setColours(transformedColours);
     setTimeout(() => {
@@ -129,14 +124,17 @@ function GreyBox() {
 
       return formatHex(colour);
     } 
-  }, [transformParams]);
+  }, [transformParams, colours]);
 
-  useMemo(() => {
-    setOutput(colours.map(colour => ({
-      id: colour.id,
-      value: transformation(colour.value)
-    })));
-  }, [colours, transformParams]);
+  const transformedColours = useMemo(() => {
+    if (colours.length === 0) {
+      return [];
+    }
+    return colours.map((colour) => ({
+        id: colour.id,
+        value: transformation(colour.value)
+    }));
+  }, [colours, transformation]); 
 
   useEffect(() => {
     if (window.Coloris) {
@@ -166,9 +164,10 @@ function GreyBox() {
         onUpdate={updateItem}
         onTextInputToggle={setTextInput}
         onClear={clearColours}
-        onReorder={(newOrder) => {console.log(newOrder); setColours(newOrder)}}
+        onReorder={(newOrder) => setColours(newOrder)}
        />
       <TransColumn 
+        values={transformParams}
         onChange={updateParams}
       />
       <OutputColours 
@@ -260,7 +259,6 @@ function DraggableColourInput({ colour, onUpdate, onRemove}) {
             dragControls={controls}
           >
             <ColourInput 
-                key = {colour.id}
                 id = {colour.id}
                 value = {colour.value}
                 onUpdate= {onUpdate}
@@ -275,7 +273,7 @@ function ColourInput({id, value, onUpdate, onRemove, dragControls}) {
   const inputRef = useRef(null);
 
   const handleRemove = (event) => {
-    onRemove(event.currentTarget.id);
+    onRemove(id);
   }
 
   return (
@@ -296,7 +294,6 @@ function ColourInput({id, value, onUpdate, onRemove, dragControls}) {
       </div>
       <div className = "input-delete">
         <button
-          id = {id}
           className = "delete-button"
           onClick = {handleRemove}
           aria-label = "Remove item"
@@ -307,7 +304,16 @@ function ColourInput({id, value, onUpdate, onRemove, dragControls}) {
       <div
         className="reorder-handle"
         onPointerDown={(e) => dragControls.start(e)}
-      ><p>≡</p></div>
+        role="button"
+        aria-label="Drag to reorder"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dragControls.start(e);
+          }
+        }}
+      ><p aria-hidden="true">≡</p></div>
     </div>
   );
 }
@@ -347,59 +353,61 @@ function OutputColours({colours, onTextConvertToggle, onIterate}) {
   )
 }
 
-function ColourOutput({id, value}) {
-  let [colour, setColour] = useState(value);
-
-  colour = useMemo(() => {
-    return value;
-  }, [value]);
-
+const ColourOutput = React.memo(function ColourOutput({id, value}) {
   return (
     <div className = "colour-output">
       <div 
         className = "output-swatch"
-        style = {{backgroundColor: colour}}>
+        style = {{backgroundColor: value}}>
       </div>
       <div className = "output-hex-row">
-        <p className = "output-hex">{colour}</p>
+        <p className = "output-hex">{value}</p>
         <button 
           className = "copy-hex-button"
-          onClick = {() => (navigator.clipboard.writeText(colour))}
+          onClick = {() => (navigator.clipboard.writeText(value))}
         >
           <i className="fa fa-copy" />
         </button>
       </div>
     </div>
   );
-}
+});
 
-function TransColumn ({onChange}) {
+function TransColumn ({onChange, values}) {
+
   const handleChange = (name, val) => {
+    values[name] = val;
     onChange(name, val);
   };
+
   return (
     <div className = "trans-column">
       <fieldset className = "trans-field">
         <legend>Luminance</legend>
         <InputSlider 
-          onChange={(val) => handleChange('brightness', val)}
+          value={values.brightness}
+          onChange={(val) => onChange('brightness', val)}
         />
       </fieldset>
       <fieldset className = "trans-field">
         <legend>Invert Luminance</legend>
         <InversionCheckbox
+          value ={values.inversionChecked}
           onChange={(val) => handleChange('inversionChecked', val)}
         />
         <InversionSlider
+          value={values.inversionMidpoint}
           onChange={(val) => handleChange('inversionMidpoint', val)}
         />
       </fieldset>
       <fieldset className = "trans-field">
         <legend>Shift Hue</legend>
         <HueShiftCheckbox 
+          value={values.hueShiftChecked}
           onChange={(val) => handleChange('hueShiftChecked', val)}
         />
         <HueSlider 
+        value={values.hueShiftTarget}
           onChange={(val) => handleChange('hueShiftTarget', val)}
         />
       </fieldset>
@@ -432,24 +440,20 @@ function TransColumn ({onChange}) {
   );
 }
 
-function InversionSlider({onChange}) {
-  const [value, setValue] = useState(50);
-
+function InversionSlider({onChange, value}) {
   const handleSliderChange = (event, newValue) => {
-    setValue(newValue);
     onChange(newValue);
   };
 
   const handleInputChange = (event) => {
-    setValue(event.target.value === '' ? 0 : Number(event.target.value));
     onChange(event.target.value === '' ? 0 : Number(event.target.value));
   };
 
   const handleBlur = () => {
-    if (value < 0) {
-      setValue(0);
+      if (value < 0) {
+      onChange(0);
     } else if (value > 100) {
-      setValue(100);
+      onChange(100);
     }
   };
 
@@ -459,7 +463,6 @@ function InversionSlider({onChange}) {
         <Grid>
         </Grid>
         <Grid size="grow">
-
             <Slider
               color="#ffffff"
               min={0}
@@ -487,70 +490,42 @@ function InversionSlider({onChange}) {
   );
 }
 
-function InversionCheckbox({onChange}) {
-  const [isChecked, setChecked] = useState(false);
-
-  const handleChange = (event) => {
-    setChecked(event.target.checked);
-    onChange(event.target.checked);
-  };
-
+function InversionCheckbox({onChange, value}) {
   return (
     <div className = "inversion-checkbox">
       <input
         type = "checkbox"
-        checked = {isChecked}
-        onChange = {handleChange}
+        checked = {value}
+        onChange = {(event) => onChange(event.target.checked)}
       />
     </div>
   )
 }
 
-function HueShiftCheckbox({onChange}) {
-  const [isChecked, setChecked] = useState(false);
-
-  const handleChange = (event) => {
-    setChecked(event.target.checked);
-    onChange(event.target.checked);
-  };
-
+function HueShiftCheckbox({onChange, value}) {
   return (
     <div className="hue-shift-checkbox">
       <input 
         type = "checkbox"
-        checked = {isChecked}
-        onChange = {handleChange}
+        checked = {value}
+        onChange = {(event) => onChange(event.target.checked)}
       />
     </div>
   )
 }
 
-function HueSlider({onChange}) {
-  const [colour, setColour] = useState({hsl: { h: 0, s: 0, l: 0, a: 0}});
+function HueSlider({onChange, value}) {
+  const colour = useMemo(() => {
+    return {hsl: { h: value, s: 0, l: 0, a: 0}};
+  }, [value]);
 
   const handleInputChange = (event) => {
     const newHue = event.target.value === '' ? 0 : Math.max(0, Math.min(359, Math.round(Number(event.target.value))));
-    setColour(prevColour => ({
-      hsl : {
-        ...prevColour.hsl,
-        h: newHue
-      }
-    }));
     onChange(newHue);
   };
 
   const handleSliderChange = (newColour) => {
-    newColour.hsl.h = Math.round(newColour.hsl.h);
-    setColour(newColour);
-    onChange(newColour.hsl.h);
-  };
-
-  const handleBlur = () => {
-    if (value < 0) {
-      setValue(0);
-    } else if (value > 359) {
-      setValue(359);
-    }
+    onChange(Math.round(newColour.hsl.h));
   };
 
   return (
@@ -558,11 +533,10 @@ function HueSlider({onChange}) {
       <HuePicker
         color={colour.hsl}
         onChange={handleSliderChange}
-        onBlue={handleBlur}
         width="100%"
       />
       <Input
-            value={colour.hsl.h}
+            value={value}
             size="small"
             onChange={handleInputChange}
             inputProps={{
@@ -574,24 +548,16 @@ function HueSlider({onChange}) {
   );
 }
 
-function InputSlider({onChange}) {
-  const [value, setValue] = useState(0);
-
-  const handleSliderChange = (event, newValue) => {
-    setValue(newValue);
-    onChange(newValue);
-  };
-
+function InputSlider({onChange, value}) {
   const handleInputChange = (event) => {
-    setValue(event.target.value === '' ? 0 : Number(event.target.value));
     onChange(event.target.value === '' ? 0 : Number(event.target.value));
   };
 
   const handleBlur = () => {
     if (value < -100) {
-      setValue(-100);
+      onChange(-100);
     } else if (value > 100) {
-      setValue(100);
+      onChange(100);
     }
   };
 
@@ -606,7 +572,7 @@ function InputSlider({onChange}) {
             min={-100}
             max={100}
             value={typeof value === 'number' ? value : 0}
-            onChange={handleSliderChange}
+            onChange={(event, newValue) => onChange(newValue)}
             aria-labelledby="input-slider"
           />
         </Grid>
@@ -630,17 +596,6 @@ function InputSlider({onChange}) {
 const Input = styled(MuiInput)`
   width: 42px;
 `;
-
-const sliderTheme = createTheme({
-  components: {
-    MuiSlider: {
-      defaultProps: {
-        color: "red"
-      },
-      
-    },
-  },
-});
 
 function ColourTextInput ({onSubmit, onClose}) {
   const [inputText, setText] = useState("");
@@ -771,8 +726,6 @@ function ConvertTextInput ({onSubmit, onClose}) {
 }
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
     <>
       <GreyBox />
